@@ -1,0 +1,13 @@
+[package]
+name = "raytracing_gpu_test"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1.0.100"
+cgmath = "0.18.0"
+env_logger = "0.11.8"
+log = "0.4.29"
+wgpu = "28.0.0"
+winit = "0.30.12"
+pollster = "0.4.0"
