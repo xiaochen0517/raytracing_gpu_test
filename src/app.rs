@@ -1,4 +1,5 @@
 mod state;
+mod pipeline;
 
 use crate::app::state::State;
 use std::sync::Arc;
