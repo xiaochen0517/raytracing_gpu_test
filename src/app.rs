@@ -1,5 +1,5 @@
-mod state;
 mod pipeline;
+mod state;
 
 use crate::app::state::State;
 use std::sync::Arc;
@@ -26,7 +26,7 @@ impl ApplicationHandler for App {
         #[allow(unused_mut)]
         let mut window_attributes = Window::default_attributes()
             .with_title(self.title.clone().unwrap_or("WGPU Application".to_string()))
-            .with_inner_size(PhysicalSize::new(800, 600))
+            .with_inner_size(PhysicalSize::new(800, 800))
             .with_resizable(false);
         let window = Arc::new(event_loop.create_window(window_attributes).unwrap());
 

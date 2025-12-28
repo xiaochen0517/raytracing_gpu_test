@@ -36,6 +36,17 @@ fn ray_sphere_intersect(ray: Ray, sphere_center: vec3<f32>, sphere_radius: f32) 
     return discriminant >= 0.0;
 }
 
+// ============ 计算光线颜色函数 ============
+fn ray_color(ray: Ray) -> vec4<f32> {
+    if (ray_sphere_intersect(ray, sphere.center, sphere.radius)) {
+        return vec4<f32>(1.0, 0.0, 0.0, 1.0);  // 相交则显示红色
+    }
+    // 背景颜色（渐变）上半天蓝色，下半白色
+    let t = 0.5 * (normalize(ray.direction).y + 1.0);
+    let background_color = mix(vec4<f32>(1.0, 1.0, 1.0, 1.0), vec4<f32>(0.5, 0.7, 1.0, 1.0), t);
+    return background_color;
+}
+
 // ============ 主计算函数 ============
 @compute @workgroup_size(8, 8, 1)
 fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
@@ -65,18 +76,8 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 
     let ray = Ray(camera_pos, ray_direction);
 
-    // ============ 检测光线与球的相交 ============
-    let hit = ray_sphere_intersect(ray, sphere.center, sphere. radius);
-
-    // ============ 输出颜色 ============
-    var color = vec4<f32>(0.0, 0.0, 0.0, 1.0);  // 默认黑色背景
-
-    if (hit) {
-        color = vec4<f32>(1.0, 0.0, 0.0, 1.0);  // 相交则显示红色
-    }
-
-    // 测试：未命中时显示紫色
-    // color = vec4<f32>(1.0, 0.0, 1.0, 1.0);
+    // ============ 获取光线颜色 ============
+    let color = ray_color(ray);
 
     // 写入存储纹理
     textureStore(output_texture, vec2<i32>(i32(pixel_x), i32(pixel_y)), color);

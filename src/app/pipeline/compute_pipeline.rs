@@ -24,7 +24,7 @@ impl ComputePipeline {
 
         let texture_size = wgpu::Extent3d {
             width: 800,
-            height: 600,
+            height: 800,
             depth_or_array_layers: 1,
         };
         let storage_texture = device.create_texture(&wgpu::TextureDescriptor {
@@ -124,7 +124,7 @@ impl ComputePipeline {
         compute_pass.set_pipeline(&self.pipeline);
         compute_pass.set_bind_group(0, &self.bind_group, &[]);
 
-        // Dispatch:  800/8 = 100, 600/8 = 75
-        compute_pass.dispatch_workgroups(100, 75, 1);
+        // Dispatch:  800/8 = 100
+        compute_pass.dispatch_workgroups(100, 100, 1);
     }
 }
