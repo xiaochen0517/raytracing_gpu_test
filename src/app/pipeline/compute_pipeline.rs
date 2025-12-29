@@ -15,11 +15,21 @@ impl ComputePipeline {
             center: [0.0, 0.0, 0.0],
             radius: 1.0,
         };
+        let sphere_vec = vec![
+            SphereData {
+                center: [0.0, 0.0, 0.0],
+                radius: 1.0,
+            },
+            SphereData {
+                center: [0.0, -100.5, -1.0],
+                radius: 100.0,
+            },
+        ];
 
-        let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        let spheres_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Sphere Uniform Buffer"),
-            contents: bytemuck::cast_slice(&[sphere_data]),
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            contents: bytemuck::cast_slice(&sphere_vec),
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
         });
 
         let texture_size = wgpu::Extent3d {
@@ -47,12 +57,12 @@ impl ComputePipeline {
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("Compute BindGroup Layout"),
             entries: &[
-                // Entry 0:  Uniform Buffer (只读)
+                // Entry 0:  Spheres Buffer (只读)
                 wgpu::BindGroupLayoutEntry {
                     binding: 0,
                     visibility: wgpu::ShaderStages::COMPUTE,
                     ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
+                        ty: wgpu::BufferBindingType::Storage { read_only: true },
                         has_dynamic_offset: false,
                         min_binding_size: None,
                     },
@@ -94,10 +104,10 @@ impl ComputePipeline {
             label: Some("Compute BindGroup"),
             layout: &bind_group_layout,
             entries: &[
-                // 绑定 Uniform Buffer
+                // 绑定 球体数据
                 wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: uniform_buffer.as_entire_binding(),
+                    resource: spheres_buffer.as_entire_binding(),
                 },
                 // 绑定 Storage Texture
                 wgpu::BindGroupEntry {
