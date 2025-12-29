@@ -5,13 +5,62 @@ struct Sphere {
 }
 
 // ============ BindGroup 绑定 ============
-// @group(0) @binding(0) - Uniform Buffer（读）
 @group(0) @binding(0)
+var output_texture: texture_storage_2d<rgba8unorm, write>;
+//@group(0) @binding(1)
+//var<uniform> seed: u32;
+@group(0) @binding(2)
 var<storage, read> spheres: array<Sphere>;
 
-// @group(0) @binding(1) - Storage Texture（写）
-@group(0) @binding(1)
-var output_texture: texture_storage_2d<rgba8unorm, write>;
+// =========== 全局变量 ============
+var<private> seed: u32;
+
+// =========== 随机数生成器 ============
+fn rand() -> f32 {
+    seed = seed + 1u;
+    var x = seed;
+    x = ((x >> 16u) ^ x) * 0x7feb352du;
+    x = ((x >> 15u) ^ x) * 0x846ca68bu;
+    x = ((x >> 16u) ^ x);
+    return f32(x) / 4294967295.0;
+}
+
+fn rand_range(min: f32, max: f32) -> f32 {
+    return min + rand() * (max - min);
+}
+
+fn rand_int(min: i32, max: i32) -> f32 {
+    return f32(min) + rand() * f32(max - min);
+}
+
+fn rand_vec3(min: f32, max: f32) -> vec3<f32> {
+    return vec3<f32>(rand_range(min, max), rand_range(min, max), rand_range(min, max));
+}
+
+fn rand_vec3_default() -> vec3<f32> {
+    return rand_vec3(0.0, 1.0);
+}
+
+fn rand_unit_vector() -> vec3<f32> {
+    var p = vec3<f32>(0.0);
+    loop {
+        p = rand_vec3(-1.0, 1.0);
+        let lensq = dot(p, p);
+        if (1e-160 < lensq && lensq <= 1.0) {
+            break;
+        }
+    }
+    return normalize(p);
+}
+
+fn rand_on_hemisphere(normal: vec3<f32>) -> vec3<f32> {
+    let in_unit_sphere = rand_unit_vector();
+    if (dot(in_unit_sphere, normal) > 0.0) {
+        return in_unit_sphere;
+    } else {
+        return -in_unit_sphere;
+    }
+}
 
 // ============ 光线结构体 ============
 struct Ray {
@@ -35,6 +84,10 @@ fn contains(interval: Interval, t: f32) -> bool {
 
 fn surrounds(interval: Interval, x: f32) -> bool {
     return interval.t_min < x && x < interval.t_max;
+}
+
+fn interval_clamp(interval: Interval, t: f32) -> f32 {
+    return clamp(t, interval.t_min, interval.t_max);
 }
 
 // ============ 光线击中数据 ============
@@ -87,22 +140,79 @@ fn hit_sphere(ray: Ray, ray_tmin: f32, ray_tmax: f32, sphere: Sphere) -> HitReco
     return hit_record;
 }
 
-// ============ 计算光线颜色函数 ============
-fn ray_color(ray: Ray) -> vec4<f32> {
-    // 场景中的球体
+fn hit_world(ray: Ray, ray_tmin: f32, ray_tmax: f32) -> HitRecord {
+    var closest_so_far = ray_tmax;
+    var hit_record: HitRecord;
+
     for (var i: u32 = 0u; i < arrayLength(&spheres); i = i + 1u) {
         let sphere = spheres[i];
-        let hit_sphere = hit_sphere(ray, 0.001, 1000.0, sphere);
-        if (hit_sphere.t > 0.0) {
-            let n = hit_sphere.normal;
-            return 0.5 * vec4<f32>(n.x + 1.0, n.y + 1.0, n.z + 1.0, 1.0);
+        let temp_record = hit_sphere(ray, ray_tmin, closest_so_far, sphere);
+        if (temp_record.t > 0.0) {
+            closest_so_far = temp_record.t;
+            hit_record = temp_record;
         }
     }
 
-    // 背景颜色（渐变）上半天蓝色，下半白色
-    let t = 0.5 * (normalize(ray.direction).y + 1.0);
-    let background_color = mix(vec4<f32>(1.0, 1.0, 1.0, 1.0), vec4<f32>(0.5, 0.7, 1.0, 1.0), t);
-    return background_color;
+    return hit_record;
+}
+
+// ============ 计算光线颜色函数 ============
+fn ray_color(initial_ray: Ray) -> vec4<f32> {
+    var ray = initial_ray;
+    var color = vec4<f32>(1.0);
+    let max_depth = 50u;
+
+    // 递归反弹
+    for (var depth: u32 = 0u; depth < max_depth; depth = depth + 1u) {
+        let hit_record = hit_world(ray, 0.001, 1000.0);
+        if (hit_record.t <= 0.0) {
+            // 背景颜色（渐变）上半天蓝色，下半白色
+            let t = 0.5 * (normalize(ray.direction).y + 1.0);
+            let background_color = mix(vec4<f32>(1.0, 1.0, 1.0, 1.0), vec4<f32>(0.5, 0.7, 1.0, 1.0), t);
+            return color * background_color;
+        }
+        let direction = hit_record.normal + rand_unit_vector();
+        ray = get_ray(hit_record.point3, direction);
+        color = color * 0.1;
+    }
+    return color;
+}
+
+// ============ 获取光线函数 ============
+fn get_ray(origin: vec3<f32>, direction: vec3<f32>) -> Ray {
+    let offset_range_min = -0.0025;
+    let offset_range_max = 0.0025;
+    let offset = vec3<f32>(rand_range(offset_range_min, offset_range_max), rand_range(offset_range_min, offset_range_max), 0.0);
+    let sampler_direction = normalize(direction + offset);
+    return Ray(origin, sampler_direction);
+}
+
+fn smaple_anti_aliasing(camera_pos: vec3<f32>, ray_direction: vec3<f32>) -> vec4<f32> {
+    let samples_per_pixel = 100u;
+    let pixel_sample_scale = 1.0 / f32(samples_per_pixel);
+    var color = vec4<f32>(0.0, 0.0, 0.0, 1.0);
+    for (var s: u32 = 0u; s < samples_per_pixel; s = s + 1u) {
+        // 在像素内随机偏移
+        let ray = get_ray(camera_pos, ray_direction);
+        color = color + ray_color(ray);
+    }
+    color = color * pixel_sample_scale;
+    return color;
+}
+
+// ============ 写入颜色函数 ============
+
+fn write_color(color: vec4<f32>) -> vec4<f32> {
+    // Gamma 校正
+    let interval = Interval(0.0, 0.999);
+    let r = interval_clamp(interval, color.r);
+    let g = interval_clamp(interval, color.g);
+    let b = interval_clamp(interval, color.b);
+    return linear_to_gamma(vec4<f32>(r, g, b, 1.0));
+}
+
+fn linear_to_gamma(color: vec4<f32>) -> vec4<f32> {
+    return vec4<f32>(sqrt(color.r), sqrt(color.g), sqrt(color.b), color.a);
 }
 
 // ============ 主计算函数 ============
@@ -110,6 +220,8 @@ fn ray_color(ray: Ray) -> vec4<f32> {
 fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let pixel_x = global_id.x;
     let pixel_y = global_id.y;
+
+    seed = pixel_x + pixel_y * 1024u;
 
     // 获取纹理尺寸
     let texture_size = textureDimensions(output_texture);
@@ -130,12 +242,14 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let camera_target = vec3<f32>(0.0, 0.0, 0.0);
 
     // 光线方向（简化版本：沿着 NDC 方向扩展）
-    let ray_direction = normalize(vec3<f32>(ndc. x, -ndc.y, -1.0));
-
-    let ray = Ray(camera_pos, ray_direction);
+    let ray_direction = normalize(vec3<f32>(ndc.x, -ndc.y, -1.0));
 
     // ============ 获取光线颜色 ============
-    let color = ray_color(ray);
+    // 采样多次抗锯齿
+    let color = smaple_anti_aliasing(camera_pos, ray_direction);
+    // 单次采样
+    // let ray = Ray(camera_pos, ray_direction);
+    // let color = ray_color(ray);
 
     // 写入存储纹理
     textureStore(output_texture, vec2<i32>(i32(pixel_x), i32(pixel_y)), color);

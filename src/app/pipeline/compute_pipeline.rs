@@ -11,17 +11,21 @@ pub struct ComputePipeline {
 
 impl ComputePipeline {
     pub fn new(device: &wgpu::Device, queue: &Queue) -> Self {
-        let sphere_data = SphereData {
-            center: [0.0, 0.0, 0.0],
-            radius: 1.0,
-        };
+        // 随机数种子
+        let seed: u32 = 42;
+        let seed_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Random Seed Buffer"),
+            contents: bytemuck::cast_slice(&[seed]),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+
         let sphere_vec = vec![
             SphereData {
                 center: [0.0, 0.0, 0.0],
                 radius: 1.0,
             },
             SphereData {
-                center: [0.0, -100.5, -1.0],
+                center: [0.0, -101.0, -1.0],
                 radius: 100.0,
             },
         ];
@@ -57,25 +61,36 @@ impl ComputePipeline {
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("Compute BindGroup Layout"),
             entries: &[
-                // Entry 0:  Spheres Buffer (只读)
+                // Storage Texture (✅ 改为只写)
                 wgpu::BindGroupLayoutEntry {
                     binding: 0,
-                    visibility: wgpu::ShaderStages::COMPUTE,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Storage { read_only: true },
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                },
-                // Entry 1: Storage Texture (✅ 改为只写)
-                wgpu::BindGroupLayoutEntry {
-                    binding: 1,
                     visibility: wgpu::ShaderStages::COMPUTE,
                     ty: wgpu::BindingType::StorageTexture {
                         access: wgpu::StorageTextureAccess::WriteOnly, // ✅ 改为 WriteOnly
                         format: wgpu::TextureFormat::Rgba8Unorm,
                         view_dimension: wgpu::TextureViewDimension::D2,
+                    },
+                    count: None,
+                },
+                // Seed Buffer (只读)
+/*                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },*/
+                // Spheres Buffer (只读)
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: true },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
                     },
                     count: None,
                 },
@@ -104,15 +119,19 @@ impl ComputePipeline {
             label: Some("Compute BindGroup"),
             layout: &bind_group_layout,
             entries: &[
-                // 绑定 球体数据
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: spheres_buffer.as_entire_binding(),
-                },
                 // 绑定 Storage Texture
                 wgpu::BindGroupEntry {
-                    binding: 1,
+                    binding: 0,
                     resource: wgpu::BindingResource::TextureView(&storage_texture_view),
+                },
+/*                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: seed_buffer.as_entire_binding(),
+                },*/
+                // 绑定 球体数据
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: spheres_buffer.as_entire_binding(),
                 },
             ],
         });
