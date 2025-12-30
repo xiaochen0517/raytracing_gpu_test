@@ -17,12 +17,10 @@ var<private> seed: u32;
 
 // =========== 随机数生成器 ============
 fn rand() -> f32 {
-    seed = seed + 1u;
-    var x = seed;
-    x = ((x >> 16u) ^ x) * 0x7feb352du;
-    x = ((x >> 15u) ^ x) * 0x846ca68bu;
-    x = ((x >> 16u) ^ x);
-    return f32(x) / 4294967295.0;
+    seed = seed * 747796405u + 2891336453u;
+    var result: u32 = ((seed >> ((seed >> 28u) + 4u)) ^ seed) * 277803737u;
+    result = (result >> 22u) ^ result;
+    return f32(result) / 4294967296.0;
 }
 
 fn rand_range(min: f32, max: f32) -> f32 {
@@ -221,8 +219,6 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let pixel_x = global_id.x;
     let pixel_y = global_id.y;
 
-    seed = pixel_x + pixel_y * 1024u;
-
     // 获取纹理尺寸
     let texture_size = textureDimensions(output_texture);
 
@@ -230,6 +226,10 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     if (pixel_x >= texture_size. x || pixel_y >= texture_size.y) {
         return;
     }
+
+    // 初始化随机数种子
+    let pixel_index = pixel_x * texture_size.y + pixel_y + (pixel_x * pixel_y);
+    seed = pixel_index;
 
     // ============ 生成光线（从相机出发）============
     // 将像素坐标归一化到 [-1, 1] 范围
